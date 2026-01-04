@@ -1,9 +1,5 @@
 streamlit
 torch
 torchvision
-transformers
-gdown
-Pillow
+pillow
 numpy
-seaborn
-matplotlib
