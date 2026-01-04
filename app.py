@@ -2,7 +2,7 @@ import streamlit as st
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torchvision import transforms
+from torchvision import transforms, models
 from PIL import Image
 import os
 from huggingface_hub import hf_hub_download
@@ -41,33 +41,28 @@ NUM_CLASSES = len(CLASS_NAMES)
 transform = transforms.Compose([
     transforms.Resize((224, 224)),
     transforms.ToTensor(),
+    transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5])
 ])
 
 # ------------------------------
 # MODEL DEFINITIONS
 # ------------------------------
-class CNNModel(nn.Module):
-    def __init__(self, num_classes):
-        super().__init__()
-        self.features = nn.Sequential(
-            nn.Conv2d(3, 32, 3, padding=1),
-            nn.ReLU(),
-            nn.MaxPool2d(2),
 
-            nn.Conv2d(32, 64, 3, padding=1),
+# ✅ Correct CNNModel (ResNet50-based)
+class CNNModel(nn.Module):
+    def __init__(self, num_classes, dropout_rate=0.355):
+        super().__init__()
+        self.backbone = models.resnet50(weights=None)  # No pretrained weights
+        in_features = self.backbone.fc.in_features
+        self.backbone.fc = nn.Sequential(
+            nn.Linear(in_features, 512),
             nn.ReLU(),
-            nn.MaxPool2d(2),
-        )
-        self.classifier = nn.Sequential(
-            nn.Flatten(),
-            nn.Linear(64 * 56 * 56, 256),
-            nn.ReLU(),
-            nn.Linear(256, num_classes)
+            nn.Dropout(dropout_rate),
+            nn.Linear(512, num_classes)
         )
 
     def forward(self, x):
-        x = self.features(x)
-        return self.classifier(x)
+        return self.backbone(x)
 
 
 class TransformerModel(nn.Module):
@@ -105,11 +100,10 @@ class HybridModel(nn.Module):
 # ------------------------------
 # HUGGING FACE MODEL LINKS
 # ------------------------------
-# Replace with your Hugging Face repo filenames
 HF_REPO = "leenSella77/fish-classification-models"
 
 MODEL_FILES = {
-    "CNN": "cnn_model.pt",
+    "CNN": "resnet50_cnn_9species.pt",
     "Transformer": "transformer_model.pt",
     "Hybrid": "hybrid_model.pth"
 }
@@ -120,22 +114,17 @@ MODEL_PATHS = {
     "Hybrid": "models/hybrid_model.pth"
 }
 
-
 # ------------------------------
 # DOWNLOAD HELPER
 # ------------------------------
-
-
 def download_model(model_name):
     os.makedirs("models", exist_ok=True)
     save_path = MODEL_PATHS[model_name]
     if not os.path.exists(save_path):
         with st.spinner(f"Downloading {model_name} model..."):
             path = hf_hub_download(repo_id=HF_REPO, filename=MODEL_FILES[model_name])
-            shutil.copy(path, save_path)  # ✅ copy instead of rename
+            shutil.copy(path, save_path)  # copy to avoid cross-device errors
     return save_path
-
-
 
 # ------------------------------
 # LOAD MODELS (CACHED)
@@ -156,15 +145,12 @@ def load_models():
 
     return cnn, transformer, hybrid
 
-
 cnn_model, transformer_model, hybrid_model = load_models()
-
 
 # ------------------------------
 # MODEL SELECT
 # ------------------------------
 model_choice = st.selectbox("Select model", ("CNN", "Transformer", "Hybrid"))
-
 model = {
     "CNN": cnn_model,
     "Transformer": transformer_model,
@@ -193,6 +179,4 @@ if uploaded_file is not None:
 
     st.subheader("🔮 Top-3 Predictions")
     for i in range(3):
-        st.write(
-            f"**{i+1}. {CLASS_NAMES[top_idxs[i]]}** — {top_probs[i].item() * 100:.2f}%"
-        )
+        st.write(f"**{i+1}. {CLASS_NAMES[top_idxs[i]]}** — {top_probs[i].item() * 100:.2f}%")
