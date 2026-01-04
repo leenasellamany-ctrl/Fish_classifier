@@ -6,6 +6,7 @@ from torchvision import transforms
 from PIL import Image
 import os
 from huggingface_hub import hf_hub_download
+import shutil
 
 # ------------------------------
 # PAGE CONFIG
@@ -123,14 +124,17 @@ MODEL_PATHS = {
 # ------------------------------
 # DOWNLOAD HELPER
 # ------------------------------
+
+
 def download_model(model_name):
     os.makedirs("models", exist_ok=True)
     save_path = MODEL_PATHS[model_name]
     if not os.path.exists(save_path):
         with st.spinner(f"Downloading {model_name} model..."):
             path = hf_hub_download(repo_id=HF_REPO, filename=MODEL_FILES[model_name])
-            os.rename(path, save_path)
+            shutil.copy(path, save_path)  # ✅ copy instead of rename
     return save_path
+
 
 
 # ------------------------------
