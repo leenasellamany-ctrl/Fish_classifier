@@ -4,3 +4,4 @@ transformers
 streamlit
 Pillow
 requests
+huggingface_hub
