@@ -1,97 +1,103 @@
-# app.py
-
 import streamlit as st
 import torch
-import torchvision.transforms as transforms
+import torch.nn.functional as F
+from torchvision import transforms
 from PIL import Image
-import gdown
 import os
 
-# -----------------------------
-# 1. GPU detection
-# -----------------------------
-DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-st.write(f"Using device: {DEVICE}")
+# ------------------------------
+# PAGE CONFIG
+# ------------------------------
+st.set_page_config(page_title="Image Classification", layout="centered")
 
-# -----------------------------
-# 2. Google Drive model download
-# -----------------------------
-MODEL_DIR = "models"
-os.makedirs(MODEL_DIR, exist_ok=True)
+st.title("🧠 Image Classification App")
+st.write("Upload an image and select a model to get predictions.")
 
-# Direct download links (your IDs)
-MODEL_LINKS = {
-    "CNN": "https://drive.google.com/uc?export=download&id=1Dj4jUHN-0FFYzgn9tY_iIGFCnOGxzgts",
-    "TRANSFORMER": "https://drive.google.com/uc?export=download&id=171i6ns7niNvjhtt3Yit7n-3auKm5sywG",
-    "HYBRID": "https://drive.google.com/uc?export=download&id=1S3vqcnt40uFiu-XMVhZxX5RP5DloeZWz",
-}
+# ------------------------------
+# DEVICE (GPU / CPU)
+# ------------------------------
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+st.info(f"Using device: **{device}**")
 
-# Download if not exists
-for name, link in MODEL_LINKS.items():
-    model_path = os.path.join(MODEL_DIR, f"{name}.pt")
-    if not os.path.exists(model_path):
-        st.write(f"Downloading {name} model...")
-        gdown.download(link, model_path, quiet=False)
+# ------------------------------
+# CLASS NAMES (EDIT IF NEEDED)
+# ------------------------------
+CLASS_NAMES = [
+    "class_0", "class_1", "class_2", "class_3", "class_4",
+    "class_5", "class_6", "class_7", "class_8", "class_9",
+    "class_10", "class_11", "class_12", "class_13", "class_14",
+    "class_15", "class_16", "class_17", "class_18", "class_19",
+    "class_20", "class_21", "class_22"
+]
 
-# -----------------------------
-# 3. Load models
-# -----------------------------
-# Replace with your actual model classes
-from cnn_model import CNNModel
-from transformer_model import TransformerModel
-from hybrid_model import HybridModel
+NUM_CLASSES = len(CLASS_NAMES)
 
-cnn_model = CNNModel().to(DEVICE)
-cnn_model.load_state_dict(torch.load(os.path.join(MODEL_DIR, "CNN.pt"), map_location=DEVICE))
-cnn_model.eval()
+# ------------------------------
+# IMAGE TRANSFORM
+# ------------------------------
+transform = transforms.Compose([
+    transforms.Resize((224, 224)),
+    transforms.ToTensor(),
+])
 
-transformer_model = TransformerModel().to(DEVICE)
-transformer_model.load_state_dict(torch.load(os.path.join(MODEL_DIR, "TRANSFORMER.pt"), map_location=DEVICE))
-transformer_model.eval()
+# ------------------------------
+# LOAD MODELS (CACHED)
+# ------------------------------
+@st.cache_resource
+def load_models():
+    cnn = torch.load("models/REAL CNN TRAINING 2ND DATASET", map_location=device)
+    transformer = torch.load("models/TRANSFORMER TRAINING 2ND DATASET", map_location=device)
+    hybrid = torch.load("models/HYBRID TRAINING 2ND DATASET", map_location=device)
 
-hybrid_model = HybridModel().to(DEVICE)
-hybrid_model.load_state_dict(torch.load(os.path.join(MODEL_DIR, "HYBRID.pt"), map_location=DEVICE))
-hybrid_model.eval()
+    cnn.eval()
+    transformer.eval()
+    hybrid.eval()
 
-# -----------------------------
-# 4. Image upload
-# -----------------------------
-st.title("Image Classification with 3 Models")
-uploaded_file = st.file_uploader("Upload an image", type=["jpg", "png", "jpeg"])
+    return cnn, transformer, hybrid
 
-if uploaded_file:
+
+cnn_model, transformer_model, hybrid_model = load_models()
+
+# ------------------------------
+# MODEL SELECT
+# ------------------------------
+model_choice = st.selectbox(
+    "Select model",
+    ("CNN", "Transformer", "Hybrid")
+)
+
+if model_choice == "CNN":
+    model = cnn_model
+elif model_choice == "Transformer":
+    model = transformer_model
+else:
+    model = hybrid_model
+
+# ------------------------------
+# IMAGE UPLOAD
+# ------------------------------
+uploaded_file = st.file_uploader(
+    "Upload an image",
+    type=["jpg", "jpeg", "png"]
+)
+
+# ------------------------------
+# PREDICTION
+# ------------------------------
+if uploaded_file is not None:
     image = Image.open(uploaded_file).convert("RGB")
     st.image(image, caption="Uploaded Image", use_column_width=True)
 
-    # -----------------------------
-    # 5. Preprocessing
-    # -----------------------------
-    transform = transforms.Compose([
-        transforms.Resize((224, 224)),
-        transforms.ToTensor(),
-        transforms.Normalize(mean=[0.485, 0.456, 0.406],
-                             std=[0.229, 0.224, 0.225])
-    ])
-    input_tensor = transform(image).unsqueeze(0).to(DEVICE)
+    img_tensor = transform(image).unsqueeze(0).to(device)
 
-    # -----------------------------
-    # 6. Predictions
-    # -----------------------------
-    def get_topk_predictions(model, input_tensor, topk=3):
-        with torch.no_grad():
-            output = model(input_tensor)
-            probs = torch.softmax(output, dim=1)
-            top_probs, top_idx = probs.topk(topk)
-            top_probs = top_probs.cpu().numpy()[0]
-            top_idx = top_idx.cpu().numpy()[0]
-        return list(zip(top_idx, top_probs))
+    with torch.no_grad():
+        outputs = model(img_tensor)
+        probs = F.softmax(outputs, dim=1).squeeze()
 
-    st.subheader("Predictions:")
+    top_probs, top_idxs = torch.topk(probs, 3)
 
-    for model_name, model in zip(["CNN", "Transformer", "Hybrid"], 
-                                 [cnn_model, transformer_model, hybrid_model]):
-        st.write(f"**{model_name} Model:**")
-        predictions = get_topk_predictions(model, input_tensor, topk=3)
-        for idx, prob in predictions:
-            st.write(f"Class {idx}: {prob*100:.2f}%")
-
+    st.subheader("🔮 Top-3 Predictions")
+    for i in range(3):
+        st.write(
+            f"**{i+1}. {CLASS_NAMES[top_idxs[i]]}** — {top_probs[i].item()*100:.2f}%"
+        )
