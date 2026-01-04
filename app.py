@@ -4,6 +4,7 @@ import torch.nn.functional as F
 from torchvision import transforms
 from PIL import Image
 import os
+import requests
 
 # ------------------------------
 # PAGE CONFIG
@@ -14,7 +15,7 @@ st.title("🧠 Image Classification App")
 st.write("Upload an image and select a model to get predictions.")
 
 # ------------------------------
-# DEVICE (GPU / CPU)
+# DEVICE
 # ------------------------------
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 st.info(f"Using device: **{device}**")
@@ -30,8 +31,6 @@ CLASS_NAMES = [
     "class_20", "class_21", "class_22"
 ]
 
-NUM_CLASSES = len(CLASS_NAMES)
-
 # ------------------------------
 # IMAGE TRANSFORM
 # ------------------------------
@@ -41,20 +40,48 @@ transform = transforms.Compose([
 ])
 
 # ------------------------------
+# GOOGLE DRIVE MODEL LINKS
+# ------------------------------
+CNN_URL = "https://drive.google.com/uc?id=1dy9a96bH64fxC74GTLv_Ab-yI_Q2Ll_b"
+TRANSFORMER_URL = "https://drive.google.com/uc?id=1ZEyiOLoS0EUD_9Y6i37D3uiLr-KhZd9R"
+HYBRID_URL = "https://drive.google.com/uc?id=1c0lcfqMl5Zg1HrCKi3jX90mAfoNl4bjf"
+
+CNN_PATH = "models/cnn_model.pt"
+TRANSFORMER_PATH = "models/transformer_model.pt"
+HYBRID_PATH = "models/hybrid_model.pth"
+
+# ------------------------------
+# DOWNLOAD HELPER
+# ------------------------------
+def download_model(url, save_path):
+    os.makedirs(os.path.dirname(save_path), exist_ok=True)
+
+    if not os.path.exists(save_path):
+        with open(save_path, "wb") as f:
+            response = requests.get(url, stream=True)
+            for chunk in response.iter_content(chunk_size=8192):
+                if chunk:
+                    f.write(chunk)
+
+# ------------------------------
 # LOAD MODELS (CACHED)
 # ------------------------------
 @st.cache_resource
 def load_models():
-    cnn = torch.load("models/REAL CNN TRAINING 2ND DATASET", map_location=device)
-    transformer = torch.load("models/TRANSFORMER TRAINING 2ND DATASET", map_location=device)
-    hybrid = torch.load("models/HYBRID TRAINING 2ND DATASET", map_location=device)
+    with st.spinner("Downloading & loading models (first run may take a while)..."):
+        download_model(CNN_URL, CNN_PATH)
+        download_model(TRANSFORMER_URL, TRANSFORMER_PATH)
+        download_model(HYBRID_URL, HYBRID_PATH)
 
-    cnn.eval()
-    transformer.eval()
-    hybrid.eval()
+        cnn = torch.load(CNN_PATH, map_location=device)
+        transformer = torch.load(TRANSFORMER_PATH, map_location=device)
+        hybrid = torch.load(HYBRID_PATH, map_location=device)
 
-    return cnn, transformer, hybrid
+        cnn.eval()
+        transformer.eval()
+        hybrid.eval()
 
+        return cnn, transformer, hybrid
 
 cnn_model, transformer_model, hybrid_model = load_models()
 
@@ -66,12 +93,11 @@ model_choice = st.selectbox(
     ("CNN", "Transformer", "Hybrid")
 )
 
-if model_choice == "CNN":
-    model = cnn_model
-elif model_choice == "Transformer":
-    model = transformer_model
-else:
-    model = hybrid_model
+model = {
+    "CNN": cnn_model,
+    "Transformer": transformer_model,
+    "Hybrid": hybrid_model
+}[model_choice]
 
 # ------------------------------
 # IMAGE UPLOAD
