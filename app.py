@@ -105,7 +105,7 @@ class HybridModel(nn.Module):
 # HUGGING FACE MODEL LINKS
 # ------------------------------
 # Replace with your Hugging Face repo filenames
-HF_REPO = "your-username/fish-classification-models"
+HF_REPO = "leenSella77/fish-classification-models"
 
 MODEL_FILES = {
     "CNN": "cnn_model.pt",
