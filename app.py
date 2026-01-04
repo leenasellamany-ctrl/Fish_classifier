@@ -5,15 +5,15 @@ import torch.nn.functional as F
 from torchvision import transforms
 from PIL import Image
 import os
-import requests
+from huggingface_hub import hf_hub_download
 
 # ------------------------------
 # PAGE CONFIG
 # ------------------------------
-st.set_page_config(page_title="Image Classification", layout="centered")
+st.set_page_config(page_title="Fish Image Classification", layout="centered")
 
-st.title("🧠 Image Classification App")
-st.write("Upload an image and select a model to get predictions.")
+st.title("🐟 Fish Image Classification App")
+st.write("Upload a fish image and select a model to get predictions.")
 
 # ------------------------------
 # DEVICE
@@ -78,8 +78,8 @@ class TransformerModel(nn.Module):
         self.fc = nn.Linear(128, num_classes)
 
     def forward(self, x):
-        x = self.patch_embed(x)           # (B, C, H, W)
-        x = x.flatten(2).permute(2, 0, 1) # (S, B, C)
+        x = self.patch_embed(x)             # (B, C, H, W)
+        x = x.flatten(2).permute(2, 0, 1)  # (S, B, C)
         x = self.encoder(x)
         x = x.mean(dim=0)
         return self.fc(x)
@@ -100,54 +100,61 @@ class HybridModel(nn.Module):
         x = x.mean(dim=0)
         return self.fc(x)
 
-# ------------------------------
-# GOOGLE DRIVE LINKS
-# ------------------------------
-CNN_URL = "https://drive.google.com/uc?id=1dy9a96bH64fxC74GTLv_Ab-yI_Q2Ll_b"
-TRANSFORMER_URL = "https://drive.google.com/uc?id=1ZEyiOLoS0EUD_9Y6i37D3uiLr-KhZd9R"
-HYBRID_URL = "https://drive.google.com/uc?id=1c0lcfqMl5Zg1HrCKi3jX90mAfoNl4bjf"
 
-CNN_PATH = "models/cnn_model.pth"
-TRANSFORMER_PATH = "models/transformer_model.pth"
-HYBRID_PATH = "models/hybrid_model.pth"
+# ------------------------------
+# HUGGING FACE MODEL LINKS
+# ------------------------------
+# Replace with your Hugging Face repo filenames
+HF_REPO = "your-username/fish-classification-models"
+
+MODEL_FILES = {
+    "CNN": "cnn_model.pt",
+    "Transformer": "transformer_model.pt",
+    "Hybrid": "hybrid_model.pth"
+}
+
+MODEL_PATHS = {
+    "CNN": "models/cnn_model.pt",
+    "Transformer": "models/transformer_model.pt",
+    "Hybrid": "models/hybrid_model.pth"
+}
+
 
 # ------------------------------
 # DOWNLOAD HELPER
 # ------------------------------
-def download_model(url, save_path):
-    os.makedirs(os.path.dirname(save_path), exist_ok=True)
+def download_model(model_name):
+    os.makedirs("models", exist_ok=True)
+    save_path = MODEL_PATHS[model_name]
     if not os.path.exists(save_path):
-        response = requests.get(url, stream=True)
-        with open(save_path, "wb") as f:
-            for chunk in response.iter_content(chunk_size=8192):
-                if chunk:
-                    f.write(chunk)
+        with st.spinner(f"Downloading {model_name} model..."):
+            path = hf_hub_download(repo_id=HF_REPO, filename=MODEL_FILES[model_name])
+            os.rename(path, save_path)
+    return save_path
+
 
 # ------------------------------
 # LOAD MODELS (CACHED)
 # ------------------------------
 @st.cache_resource
 def load_models():
-    with st.spinner("Downloading & loading models (first run may take a while)..."):
-        download_model(CNN_URL, CNN_PATH)
-        download_model(TRANSFORMER_URL, TRANSFORMER_PATH)
-        download_model(HYBRID_URL, HYBRID_PATH)
+    cnn = CNNModel(NUM_CLASSES).to(device)
+    transformer = TransformerModel(NUM_CLASSES).to(device)
+    hybrid = HybridModel(NUM_CLASSES).to(device)
 
-        cnn = CNNModel(NUM_CLASSES).to(device)
-        transformer = TransformerModel(NUM_CLASSES).to(device)
-        hybrid = HybridModel(NUM_CLASSES).to(device)
+    cnn.load_state_dict(torch.load(download_model("CNN"), map_location=device))
+    transformer.load_state_dict(torch.load(download_model("Transformer"), map_location=device))
+    hybrid.load_state_dict(torch.load(download_model("Hybrid"), map_location=device))
 
-        cnn.load_state_dict(torch.load(CNN_PATH, map_location=device))
-        transformer.load_state_dict(torch.load(TRANSFORMER_PATH, map_location=device))
-        hybrid.load_state_dict(torch.load(HYBRID_PATH, map_location=device))
+    cnn.eval()
+    transformer.eval()
+    hybrid.eval()
 
-        cnn.eval()
-        transformer.eval()
-        hybrid.eval()
+    return cnn, transformer, hybrid
 
-        return cnn, transformer, hybrid
 
 cnn_model, transformer_model, hybrid_model = load_models()
+
 
 # ------------------------------
 # MODEL SELECT
