@@ -103,7 +103,7 @@ class HybridModel(nn.Module):
 HF_REPO = "leenSella77/fish-classification-models"
 
 MODEL_FILES = {
-    "CNN": "resnet50_cnn_9species.pt",
+    "CNN": "cnn_model.pt",
     "Transformer": "transformer_model.pt",
     "Hybrid": "hybrid_model.pth"
 }
